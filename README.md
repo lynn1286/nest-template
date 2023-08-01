@@ -145,3 +145,209 @@ export class DatabaseModule {}
 
 ```
 
+## `mysql` 配置
+安装：
+```BASH
+npm i @nestjs/typeorm typeorm mysql2
+```
+
+在`app.module.ts`文件下进行模块导入：
+```JS
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import configurationYaml from './config/index';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      cache: true,
+      load: [configurationYaml],
+      isGlobal: true,
+    }),
+
+    // 使用 typeorm 动态模块注册，传入全局配置
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        // 读取全局配置下的mysql配置
+        return configService.get('GLOBAL_CONFIG.db.mysql');
+      },
+    }),
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
+```
+
+## 全局异常处理器
+创建`filter`：
+```BASH
+nest g filter core/filter/http.exception
+```
+创建`api.exception.filter.ts`文件：
+```JS
+import { HttpException, HttpStatus } from '@nestjs/common';
+import { ApiCode } from 'src/common/enums/api.code.enum';
+
+/**
+ * @description: 自定义 Exception 增加业务状态码响应
+ * @return {*}
+ */
+export class ApiException extends HttpException {
+  private errorMessage: string;
+  private errorCode: ApiCode;
+
+  constructor(
+    errorMessage: string,
+    errorCode: ApiCode,
+    statusCode: HttpStatus = HttpStatus.OK,
+  ) {
+    super(errorMessage, statusCode);
+    this.errorMessage = errorMessage;
+    this.errorCode = errorCode;
+  }
+
+  getErrorCode(): ApiCode {
+    return this.errorCode;
+  }
+
+  getErrorMessage(): string {
+    return this.errorMessage;
+  }
+}
+```
+创建业务状态码枚举文件`api.code.enum.ts`:
+```JS
+/**
+ * @description: 定义业务请求状态码
+ * @return {*}
+ */
+export enum ApiCode {
+  TIMEOUT = -1, // 系统繁忙
+  SUCCESS = 0, // 请求成功
+
+  BUSINESS_ERROR = 4001, // 业务错误
+  PARAMS_ERROR = 4002, // 参数不合法
+  SIGN_ERROR = 4003, // 验签失败
+  TOKEN_ERROR = 4004, // token不合法
+}
+```
+修改`http.exception.filter.ts`文件内容：
+```js
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
+import { ApiException } from './api.exception.filter';
+
+@Catch(HttpException)
+export class HttpExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>(); // 获取express响应上下文
+    const request = ctx.getRequest<Request>(); // 获取express请求上下文
+    const status = exception.getStatus(); // 读取http状态码
+
+    // 判断 exception 是否在 ApiException 原型链上
+    if (exception instanceof ApiException) {
+      response.status(status).json({
+        code: exception.getErrorCode(),
+        timestamp: new Date().toISOString(),
+        path: request.url,
+        msg: exception.getErrorMessage(),
+      });
+
+      return;
+    }
+
+    response.status(status).json({
+      code: status,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+      msg: exception.message,
+    });
+  }
+}
+```
+
+在`app.module.ts`中注册：
+```JS
+@Module({
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    },
+  ],
+})
+export class AppModule {}
+```
+
+测试下：
+```BASH
+@Get()
+getHello(): string {
+  // throw new HttpException('禁止访问', HttpStatus.FORBIDDEN);
+
+  // 自定义 Exception 返回业务异常
+  throw new ApiException('用户不存在', ApiCode.SIGN_ERROR);
+  return this.appService.getHello();
+}
+```
+
+## 全局响应体格式化
+创建文件：
+```BASH
+nest g interceptor core/interceptor/transform
+```
+修改`transform.interceptor.ts`文件：
+```JS
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { ApiCode } from 'src/common/enums/api.code.enum';
+
+export interface Response<T> {
+  data: T;
+}
+
+@Injectable()
+export class TransformInterceptor<T>
+  implements NestInterceptor<T, Response<T>>
+{
+  intercept(
+    context: ExecutionContext,
+    next: CallHandler,
+  ): Observable<Response<T>> {
+    return next.handle().pipe(
+      map((data) => ({
+        code: ApiCode.SUCCESS,
+        data,
+        msg: '请求成功',
+      })),
+    );
+  }
+}
+```
+在`app.module.ts`中注册：
+```JS
+{
+  provide: APP_INTERCEPTOR,
+  useClass: TransformInterceptor,
+},
+```
+## 实现`JWT`登陆
+

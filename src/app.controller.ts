@@ -1,6 +1,8 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, HttpException, HttpStatus } from '@nestjs/common';
 import { AppService } from './app.service';
 import { ConfigService } from '@nestjs/config';
+import { ApiException } from './core/filter/http.exception/api.exception.filter';
+import { ApiCode } from './common/enums/api.code.enum';
 
 @Controller()
 export class AppController {
@@ -11,9 +13,10 @@ export class AppController {
 
   @Get()
   getHello(): string {
-    console.log(this.configService.get('GLOBAL_CONFIG.http.port')); // 3000
-    console.log(this.configService.get('GLOBAL_CONFIG.db')); // { host: 'root', port: 3306 }
+    // throw new HttpException('禁止访问', HttpStatus.FORBIDDEN);
 
+    // 自定义 Exception 返回业务异常
+    throw new ApiException('用户不存在', ApiCode.USER_EXIST);
     return this.appService.getHello();
   }
 }
