@@ -1,38 +1,48 @@
-import {
-  PipeTransform,
-  Injectable,
-  ArgumentMetadata,
-  BadRequestException,
-} from '@nestjs/common';
+import { PipeTransform, Injectable, ArgumentMetadata } from '@nestjs/common';
 import { plainToClass } from 'class-transformer';
-import { validate } from 'class-validator';
+import { ValidationError, validate } from 'class-validator';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
+import { APIException } from 'src/core/filter/http.exception/api.exception.filter';
 
 @Injectable()
 export class ValidationPipe implements PipeTransform<any> {
-  async transform(value: any, metadata: ArgumentMetadata) {
-    if (!metadata.metatype || !this.toValidate(metadata.metatype)) {
-      return value;
+  async transform(
+    paramValue: any,
+    { metatype: paramMetaType }: ArgumentMetadata,
+  ) {
+    if (!paramMetaType || !this.toValidate(paramMetaType)) {
+      return paramValue;
     }
-    const object = plainToClass(metadata.metatype, value);
+    const object = plainToClass(paramMetaType, paramValue);
     const errors = await validate(object);
-    if (errors.length > 0) {
-      throw new BadRequestException(this.stringifyValidationErrors(errors));
+    const errorList: string[] = [];
+    const errObjList: ValidationError[] = [...errors];
+
+    do {
+      const e = errObjList.shift();
+      if (!e) {
+        break;
+      }
+      if (e.constraints) {
+        for (const item in e.constraints) {
+          errorList.push(e.constraints[item]);
+        }
+      }
+      if (e.children) {
+        errObjList.push(...e.children);
+      }
+    } while (true);
+    if (errorList.length > 0) {
+      throw new APIException(
+        '请求参数校验错误:' + errorList.join(),
+        ErrorCodeEnum.QUERY_PARAM_INVALID_FAIL,
+      );
     }
-    return value;
+    return object;
   }
 
-  private toValidate(metatype: any): boolean {
-    const types: any[] = [String, Boolean, Number, Array, Object];
-    return !types.includes(metatype);
-  }
-
-  private stringifyValidationErrors(errors: any[]): string[] {
-    const result: string[] = [];
-    errors.forEach((error) => {
-      Object.entries(error.constraints).forEach(([property, message]) => {
-        result.push(`${error.property}: ${message}`);
-      });
-    });
-    return result;
+  private toValidate(paramMetatype: Function): boolean {
+    const types: Function[] = [String, Boolean, Number, Array, Object];
+    return !types.includes(paramMetatype);
   }
 }

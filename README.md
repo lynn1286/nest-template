@@ -3,7 +3,9 @@
 [![NestJS](https://img.shields.io/badge/NestJS-v8.0.0-green.svg)](https://nestjs.com) [![Typescript](https://img.shields.io/badge/Typescript-v5.0.0-white.svg)](https://www.typescriptlang.org/) [![npm](https://img.shields.io/badge/npm-v8.0.0-blue.svg)](https://www.npmjs.com/) [![node](https://img.shields.io/badge/node-v16.15.0-bluegreen.svg)](https://nodejs.org/en)
 
 
+
 ## `config` 全局配置
+
 安装依赖：
 ```BASH
 npm i @nestjs/config
@@ -145,7 +147,10 @@ export class DatabaseModule {}
 
 ```
 
+
+
 ## `mysql` 配置
+
 安装：
 ```BASH
 npm i @nestjs/typeorm typeorm mysql2
@@ -184,27 +189,86 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 export class AppModule {}
 ```
 
-## 全局异常处理器
-创建`filter`：
-```BASH
+
+
+## 统一的`Filter`异常处理器
+
+新建文件：
+
+```bash
 nest g filter core/filter/http.exception
 ```
-创建`api.exception.filter.ts`文件：
-```JS
+
+修改文件`http.exception.filter.ts`内容：
+
+```typescript
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
+import { APIException } from './api.exception.filter';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
+
+@Catch(HttpException)
+export class HttpExceptionFilter implements ExceptionFilter {
+  catch(paramException: HttpException, paramHost: ArgumentsHost) {
+    const ctx = paramHost.switchToHttp();
+    const response = ctx.getResponse() as Response;
+    const request = ctx.getRequest() as Request;
+
+    const message = paramException.message;
+
+    let retCode = ErrorCodeEnum.FAIL;
+    let status = HttpStatus.OK;
+
+    if (paramException instanceof APIException) {
+      retCode = (paramException as APIException).getErrorCode();
+    } else if (paramException instanceof HttpException) {
+      status = (paramException as HttpException).getStatus();
+    } else {
+      status = HttpStatus.INTERNAL_SERVER_ERROR;
+    }
+
+    const errorResponse = {
+      /** 错误消息 */
+      msg: message,
+      /** 业务状态码 */
+      code: retCode,
+      /** http 状态码 */
+      statusCode: status,
+      /** 当前请求路由 */
+      url: request.originalUrl,
+    };
+
+    // 设置返回的状态码、请求头、发送错误信息
+    response.status(HttpStatus.OK);
+    response.header('Content-Type', 'application/json; charset=utf-8');
+    response.send(errorResponse);
+  }
+}
+```
+
+接着在同目录下新建`api.exception.filter.ts`:
+
+```typescript
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { ApiCode } from 'src/common/enums/api.code.enum';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
 
 /**
  * @description: 自定义 Exception 增加业务状态码响应
  * @return {*}
  */
-export class ApiException extends HttpException {
+export class APIException extends HttpException {
   private errorMessage: string;
-  private errorCode: ApiCode;
+  private errorCode: ErrorCodeEnum;
 
   constructor(
     errorMessage: string,
-    errorCode: ApiCode,
+    errorCode: ErrorCodeEnum,
     statusCode: HttpStatus = HttpStatus.OK,
   ) {
     super(errorMessage, statusCode);
@@ -212,7 +276,7 @@ export class ApiException extends HttpException {
     this.errorCode = errorCode;
   }
 
-  getErrorCode(): ApiCode {
+  getErrorCode(): ErrorCodeEnum {
     return this.errorCode;
   }
 
@@ -221,95 +285,74 @@ export class ApiException extends HttpException {
   }
 }
 ```
-创建业务状态码枚举文件`api.code.enum.ts`:
-```JS
+
+接着创建`error.code.enum.ts`文件：
+
+```typescript
 /**
  * @description: 定义业务请求状态码
  * @return {*}
  */
-export enum ApiCode {
-  TIMEOUT = -1, // 系统繁忙
-  SUCCESS = 0, // 请求成功
+export enum ErrorCodeEnum {
+  /** 请求成功 */
+  SUCCESS = 0,
+  /** 系统错误 */
+  FAIL = 1,
+  /** 系统繁忙 */
+  TIMEOUT = -1,
 
-  BUSINESS_ERROR = 4001, // 业务错误
-  PARAMS_ERROR = 4002, // 参数不合法
-  SIGN_ERROR = 4003, // 验签失败
-  TOKEN_ERROR = 4004, // token不合法
-}
-```
-修改`http.exception.filter.ts`文件内容：
-```js
-import {
-  ExceptionFilter,
-  Catch,
-  ArgumentsHost,
-  HttpException,
-} from '@nestjs/common';
-import { Request, Response } from 'express';
-import { ApiException } from './api.exception.filter';
-
-@Catch(HttpException)
-export class HttpExceptionFilter implements ExceptionFilter {
-  catch(exception: HttpException, host: ArgumentsHost) {
-    const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>(); // 获取express响应上下文
-    const request = ctx.getRequest<Request>(); // 获取express请求上下文
-    const status = exception.getStatus(); // 读取http状态码
-
-    // 判断 exception 是否在 ApiException 原型链上
-    if (exception instanceof ApiException) {
-      response.status(status).json({
-        code: exception.getErrorCode(),
-        timestamp: new Date().toISOString(),
-        path: request.url,
-        msg: exception.getErrorMessage(),
-      });
-
-      return;
-    }
-
-    response.status(status).json({
-      code: status,
-      timestamp: new Date().toISOString(),
-      path: request.url,
-      msg: exception.message,
-    });
-  }
+  /** 用户已存在 */
+  USER_EXIST = 1000,
+  /** 请求参数校验失败 */
+  QUERY_PARAM_INVALID_FAIL = 1001,
 }
 ```
 
-在`app.module.ts`中注册：
-```JS
+注册成全局`Filter`异常处理器：
+
+```typescript
 @Module({
+  imports: [
+    ConfigModule.forRoot({
+      cache: true,
+      load: [configurationYaml],
+      isGlobal: true,
+    }),
+
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        return configService.get('GLOBAL_CONFIG.db.mysql');
+      },
+    }),
+    UserModule,
+  ],
+  controllers: [AppController],
   providers: [
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,
     },
+    AppService,
   ],
 })
 export class AppModule {}
 ```
 
-测试下：
-```BASH
-@Get()
-getHello(): string {
-  // throw new HttpException('禁止访问', HttpStatus.FORBIDDEN);
 
-  // 自定义 Exception 返回业务异常
-  throw new ApiException('用户不存在', ApiCode.SIGN_ERROR);
-  return this.appService.getHello();
-}
-```
 
-## 全局响应体格式化
+## 返回格式化拦截器(`interceptor`)
+
 创建文件：
-```BASH
+
+```
 nest g interceptor core/interceptor/transform
 ```
+
 修改`transform.interceptor.ts`文件：
-```JS
+
+```typescript
 import {
   Injectable,
   NestInterceptor,
@@ -318,7 +361,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { ApiCode } from 'src/common/enums/api.code.enum';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
 
 export interface Response<T> {
   data: T;
@@ -334,7 +377,7 @@ export class TransformInterceptor<T>
   ): Observable<Response<T>> {
     return next.handle().pipe(
       map((data) => ({
-        code: ApiCode.SUCCESS,
+        code: ErrorCodeEnum.SUCCESS,
         data,
         msg: '请求成功',
       })),
@@ -342,12 +385,144 @@ export class TransformInterceptor<T>
   }
 }
 ```
-在`app.module.ts`中注册：
-```JS
-{
-  provide: APP_INTERCEPTOR,
-  useClass: TransformInterceptor,
-},
+
+注册成全局拦截器(`interceptor`)：
+
+```typescript
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      cache: true,
+      load: [configurationYaml],
+      isGlobal: true,
+    }),
+
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        return configService.get('GLOBAL_CONFIG.db.mysql');
+      },
+    }),
+    UserModule,
+  ],
+  controllers: [AppController],
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TransformInterceptor,
+    },
+    AppService,
+  ],
+})
+export class AppModule {}
+
 ```
-## 实现`JWT`登陆
+
+
+
+## 格式化`DTO`参数校验
+
+创建文件：
+
+```
+nest g pipe /core/pipes/validation
+```
+
+修改`validation.pipe.ts`：
+
+```typescript
+import { PipeTransform, Injectable, ArgumentMetadata } from '@nestjs/common';
+import { plainToClass } from 'class-transformer';
+import { ValidationError, validate } from 'class-validator';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
+import { APIException } from 'src/core/filter/http.exception/api.exception.filter';
+
+@Injectable()
+export class ValidationPipe implements PipeTransform<any> {
+  async transform(
+    paramValue: any,
+    { metatype: paramMetaType }: ArgumentMetadata,
+  ) {
+    if (!paramMetaType || !this.toValidate(paramMetaType)) {
+      return paramValue;
+    }
+    const object = plainToClass(paramMetaType, paramValue);
+    const errors = await validate(object);
+    const errorList: string[] = [];
+    const errObjList: ValidationError[] = [...errors];
+
+    do {
+      const e = errObjList.shift();
+      if (!e) {
+        break;
+      }
+      if (e.constraints) {
+        for (const item in e.constraints) {
+          errorList.push(e.constraints[item]);
+        }
+      }
+      if (e.children) {
+        errObjList.push(...e.children);
+      }
+    } while (true);
+    if (errorList.length > 0) {
+      throw new APIException(
+        '请求参数校验错误:' + errorList.join(),
+        ErrorCodeEnum.QUERY_PARAM_INVALID_FAIL,
+      );
+    }
+    return object;
+  }
+
+  private toValidate(paramMetatype: Function): boolean {
+    const types: Function[] = [String, Boolean, Number, Array, Object];
+    return !types.includes(paramMetatype);
+  }
+}
+```
+
+注册成全局管道(`pipe`)：
+
+```typescript
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      cache: true,
+      load: [configurationYaml],
+      isGlobal: true,
+    }),
+
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        return configService.get('GLOBAL_CONFIG.db.mysql');
+      },
+    }),
+    UserModule,
+  ],
+  controllers: [AppController],
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    },
+    {
+      provide: APP_PIPE,
+      useClass: ValidationPipe,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TransformInterceptor,
+    },
+    AppService,
+  ],
+})
+export class AppModule {}
+```
 

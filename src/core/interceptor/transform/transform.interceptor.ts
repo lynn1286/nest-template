@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { ApiCode } from 'src/common/enums/api.code.enum';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
 
 export interface Response<T> {
   data: T;
@@ -22,7 +22,7 @@ export class TransformInterceptor<T>
   ): Observable<Response<T>> {
     return next.handle().pipe(
       map((data) => ({
-        code: ApiCode.SUCCESS,
+        code: ErrorCodeEnum.SUCCESS,
         data,
         msg: '请求成功',
       })),

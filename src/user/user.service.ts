@@ -4,8 +4,8 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ApiException } from 'src/core/filter/http.exception/api.exception.filter';
-import { ApiCode } from 'src/common/enums/api.code.enum';
+import { APIException } from 'src/core/filter/http.exception/api.exception.filter';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
 
 @Injectable()
 export class UserService {
@@ -23,7 +23,8 @@ export class UserService {
     const existUser = await this.userRepository.findOneBy({ username });
 
     // 业务查询异常
-    if (existUser) throw new ApiException('用户已存在', ApiCode.USER_EXIST);
+    if (existUser)
+      throw new APIException('用户已存在', ErrorCodeEnum.USER_EXIST);
 
     try {
       // 创建新用户，此时还未写入到数据库

@@ -3,37 +3,46 @@ import {
   Catch,
   ArgumentsHost,
   HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { ApiException } from './api.exception.filter';
+import { APIException } from './api.exception.filter';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
-  catch(exception: HttpException, host: ArgumentsHost) {
-    const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>(); // 获取express响应上下文
-    const request = ctx.getRequest<Request>(); // 获取express请求上下文
-    const status = exception.getStatus(); // 读取http状态码
+  catch(paramException: HttpException, paramHost: ArgumentsHost) {
+    const ctx = paramHost.switchToHttp();
+    const response = ctx.getResponse() as Response;
+    const request = ctx.getRequest() as Request;
 
-    // 判断 exception 是否在 ApiException 原型链上
-    if (exception instanceof ApiException) {
-      response.status(status).json({
-        code: exception.getErrorCode(),
-        timestamp: new Date().toISOString(),
-        path: request.url,
-        msg: exception.getErrorMessage(),
-        stack: exception.stack,
-        error: exception.getResponse(),
-      });
+    const message = paramException.message;
+
+    let retCode = ErrorCodeEnum.FAIL;
+    let status = HttpStatus.OK;
+
+    if (paramException instanceof APIException) {
+      retCode = (paramException as APIException).getErrorCode();
+    } else if (paramException instanceof HttpException) {
+      status = (paramException as HttpException).getStatus();
     } else {
-      response.status(status).json({
-        code: status,
-        timestamp: new Date().toISOString(),
-        path: request.url,
-        msg: exception.message,
-        stack: exception.stack,
-        error: exception.getResponse(),
-      });
+      status = HttpStatus.INTERNAL_SERVER_ERROR;
     }
+
+    const errorResponse = {
+      /** 错误消息 */
+      msg: message,
+      /** 业务状态码 */
+      code: retCode,
+      /** http 状态码 */
+      statusCode: status,
+      /** 当前请求路由 */
+      url: request.originalUrl,
+    };
+
+    // 设置返回的状态码、请求头、发送错误信息
+    response.status(HttpStatus.OK);
+    response.header('Content-Type', 'application/json; charset=utf-8');
+    response.send(errorResponse);
   }
 }
