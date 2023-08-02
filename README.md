@@ -580,7 +580,7 @@ export class AppModule {}
 
 
 
-## 使用`redis`
+## 配置`redis`模块
 
 安装：
 
@@ -591,6 +591,89 @@ npm install redis
 创建`cache`模块：
 
 ```
-nest g res cache
+nest g module cache
+nest g service cache
+```
+
+修改`cache.module.ts`文件内容：
+
+```typescript
+import { Module } from '@nestjs/common';
+import { CacheService } from './cache.service';
+import { createClient } from 'redis';
+import { ConfigService } from '@nestjs/config';
+
+@Module({
+  providers: [
+    CacheService,
+    {
+      provide: 'REDIS_CLIENT',
+      inject: [ConfigService],
+      async useFactory(configService: ConfigService) {
+        const socket = configService.get('GLOBAL_CONFIG.db.redis');
+        const client = createClient({
+          socket,
+        });
+        await client.connect();
+        return client;
+      },
+    },
+  ],
+  exports: [CacheService],
+})
+export class CacheModule {}
+```
+
+修改`cache.service.ts`内容：
+
+```typescript
+import { Inject, Injectable } from '@nestjs/common';
+import { RedisClientType } from 'redis';
+@Injectable()
+export class CacheService {
+  constructor(@Inject('REDIS_CLIENT') private redisClient: RedisClientType) {}
+
+  /**
+   * @description: 获取值
+   * @param {*} key
+   * @return {*}
+   */
+  async get(key) {
+    let value = await this.redisClient.get(key);
+    try {
+      value = JSON.parse(value);
+    } catch (error) {}
+    return value;
+  }
+
+  /**
+   * @description: 设置值
+   * @param {string} key
+   * @param {any} value
+   * @param {number} second
+   * @return {*}
+   */
+  async set(key: string, value: any, second?: number) {
+    value = JSON.stringify(value);
+    return await this.redisClient.set(key, value, { EX: second });
+  }
+
+  /**
+   * @description: 删除值
+   * @param {string} key
+   * @return {*}
+   */
+  async del(key: string) {
+    return await this.redisClient.del(key);
+  }
+
+  /**
+   * @description: 清除缓存
+   * @return {*}
+   */
+  async flushall() {
+    return await this.redisClient.flushAll();
+  }
+}
 ```
 
