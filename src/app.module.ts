@@ -9,6 +9,7 @@ import { HttpExceptionFilter } from './core/filter/http.exception/http.exception
 import { TransformInterceptor } from './core/interceptor/transform/transform.interceptor';
 import { UserModule } from './user/user.module';
 import { ValidationPipe } from './core/pipes/validation/validation.pipe';
+import { CacheModule } from './cache/cache.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ValidationPipe } from './core/pipes/validation/validation.pipe';
       },
     }),
     UserModule,
+    CacheModule,
   ],
   controllers: [AppController],
   providers: [

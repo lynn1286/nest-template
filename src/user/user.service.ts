@@ -6,11 +6,13 @@ import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { APIException } from 'src/core/filter/http.exception/api.exception.filter';
 import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
+import { CacheService } from 'src/cache/cache.service';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User) private readonly userRepository: Repository<User>,
+    private cacheService: CacheService,
   ) {}
 
   /**

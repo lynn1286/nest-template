@@ -12,3 +12,6 @@ db:
     password: "lynn0922.."
     database: "management"
     synchronize: false # 是否自动同步实体文件,生产环境建议关闭
+  redis:
+    host: "127.0.0.1"
+    port: 6379

@@ -580,3 +580,17 @@ export class AppModule {}
 
 
 
+## 使用`redis`
+
+安装：
+
+```
+npm install redis 
+```
+
+创建`cache`模块：
+
+```
+nest g res cache
+```
+
