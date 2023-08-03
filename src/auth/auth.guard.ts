@@ -29,7 +29,7 @@ export class AuthGuard implements CanActivate {
     const isPublic = this.reflector.getAllAndOverride<boolean>('isPublic', [
       // 即将调用的方法
       context.getHandler(),
-      // controller类型
+      // controller 类型
       context.getClass(),
     ]);
 

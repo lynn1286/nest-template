@@ -1,4 +1,11 @@
-import { IsNotEmpty, IsOptional, IsString, Length } from 'class-validator';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Length,
+} from 'class-validator';
 
 export class CreateUserDto {
   @Length(6, 30, { message: '$property最小6个字符,最大30个字符' })
@@ -22,4 +29,8 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   email: string;
+
+  @IsArray()
+  @IsNumber({}, { each: true })
+  roleIds: number[];
 }

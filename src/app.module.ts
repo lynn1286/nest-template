@@ -11,6 +11,8 @@ import { UserModule } from './core/modules/user/user.module';
 import { ValidationPipe } from './core/pipes/validation/validation.pipe';
 import { CacheModule } from './cache/cache.module';
 import { AuthModule } from './auth/auth.module';
+import { PermissionModule } from './core/modules/permission/permission.module';
+import { RoleModule } from './core/modules/role/role.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { AuthModule } from './auth/auth.module';
     UserModule,
     CacheModule,
     AuthModule,
+    PermissionModule,
+    RoleModule,
   ],
   controllers: [AppController],
   providers: [

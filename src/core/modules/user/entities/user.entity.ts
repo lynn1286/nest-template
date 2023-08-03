@@ -1,6 +1,14 @@
-import { BeforeInsert, Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  BeforeInsert,
+  Column,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import * as crypto from 'crypto';
 import encry from '@/common/utils/crypto.util';
+import { Role } from '../../role/entities/role.entity';
 
 @Entity('user')
 export class User {
@@ -30,9 +38,6 @@ export class User {
   email: string;
 
   @Column({ nullable: true })
-  role: string;
-
-  @Column({ nullable: true })
   salt: string;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
@@ -40,4 +45,10 @@ export class User {
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   update_time: Date;
+
+  @ManyToMany(() => Role, { createForeignKeyConstraints: false })
+  @JoinTable({
+    name: 'user_role_relation',
+  })
+  roles: Role[];
 }

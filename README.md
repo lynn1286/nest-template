@@ -1089,3 +1089,480 @@ export const Public = () => SetMetadata('isPublic', true);
 ```
 
 逻辑很简单，给公开的接口做个标记。
+
+
+
+## 基于`RBAC`权限控制实现
+
+`RBAC(Role Based Access Control)`是基于角色的权限控制，简单来说就是给用户赋予一些角色,那么该用户就会拥有这些角色的所有权限。
+
+先来创建权限:
+
+```
+nest g res core/modules/permission
+```
+
+接着创建权限表，修改`permission.entity.ts`文件：
+
+```typescript
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+
+@Entity()
+export class Permission {
+  @PrimaryGeneratedColumn()
+  id: string;
+
+  @Column({
+    length: 50,
+  })
+  name: string;
+
+  @Column({
+    length: 100,
+    nullable: true,
+  })
+  desc: string;
+
+  @CreateDateColumn()
+  createTime: Date;
+
+  @UpdateDateColumn()
+  updateTime: Date;
+}
+```
+
+接着需要清楚一个关系： 一个权限可以赋给多个角色，同时一个角色也可以有多个权限，所以权限和角色之间是多对多的关系，这样我们就需要一个中间表(`role_permission_relation`)将它们关联起来。
+
+那接下来就要创建角色(`role`)模块：
+
+```
+nest g res core/modules/role
+```
+
+接着创建`role`表，修改`role.entity.ts`文件：
+
+```typescript
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { Permission } from '../../permission/entities/permission.entity';
+
+@Entity()
+export class Role {
+  @PrimaryGeneratedColumn()
+  id: string;
+
+  @Column({
+    length: 20,
+  })
+  name: string;
+
+  @CreateDateColumn()
+  createTime: Date;
+
+  @UpdateDateColumn()
+  updateTime: Date;
+
+  // 与 Permission 表是多对多的关系
+  @ManyToMany(() => Permission)
+  // 创建关联的中间表
+  @JoinTable({
+    name: 'role_permission_relation',
+  })
+  permissions: Permission[];
+}
+```
+
+同样的用户(`user`)与角色(`role`)之间也是多对多的关系，所以也需要创建一个`user_role_relation`中间表来关联它们：
+
+```typescript
+import {
+  BeforeInsert,
+  Column,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import * as crypto from 'crypto';
+import encry from '@/common/utils/crypto.util';
+import { Role } from '../../role/entities/role.entity';
+
+@Entity('user')
+export class User {
+  /** 插入前处理加盐操作 */
+  @BeforeInsert()
+  beforeInsert() {
+    this.salt = crypto.randomBytes(4).toString('base64');
+    this.password = encry(this.password, this.salt);
+  }
+
+  @PrimaryGeneratedColumn('uuid')
+  id: number;
+
+  @Column({ length: 30 })
+  username: string;
+
+  @Column({ nullable: true })
+  nickname: string;
+
+  @Column()
+  password: string;
+
+  @Column({ nullable: true })
+  avatar: string;
+
+  @Column({ nullable: true })
+  email: string;
+
+  @Column({ nullable: true })
+  salt: string;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  create_time: Date;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  update_time: Date;
+	
+  @ManyToMany(() => Role)
+  @JoinTable({
+    name: 'user_role_relation',
+  })
+  roles: Role[];
+}
+```
+
+提供`API`给前端使用，修改`permission.service.ts`文件：
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { CreatePermissionDto } from './dto/create-permission.dto';
+import { Permission } from './entities/permission.entity';
+import { APIException } from '@/core/filter/http.exception/api.exception.filter';
+import { ErrorCodeEnum } from '@/common/enums/error.code.enum';
+
+@Injectable()
+export class PermissionService {
+  constructor(
+    @InjectRepository(Permission)
+    private permissionRepository: Repository<Permission>,
+  ) {}
+
+  /**
+   * @description: 创建权限
+   * @param {CreatePermissionDto} createPermissionDto
+   * @return {*}
+   */
+  async create(createPermissionDto: CreatePermissionDto) {
+    const name = createPermissionDto.name;
+    const existPermission = await this.permissionRepository.findOne({
+      where: { name },
+    });
+
+    if (existPermission) {
+      throw new APIException('权限字段已存在', ErrorCodeEnum.PERMISSSION_EXIST);
+    }
+    return await this.permissionRepository.save(createPermissionDto);
+  }
+}
+```
+
+`permission.controller.ts`文件修改:
+
+```typescript
+import { Controller, Post, Body } from '@nestjs/common';
+import { PermissionService } from './permission.service';
+import { CreatePermissionDto } from './dto/create-permission.dto';
+
+@Controller('permission')
+export class PermissionController {
+  constructor(private readonly permissionService: PermissionService) {}
+
+  @Post('create')
+  create(@Body() createPermissionDto: CreatePermissionDto) {
+    return this.permissionService.create(createPermissionDto);
+  }
+}
+```
+
+接着修改`role`模块,由于`role`表需要关联`Permission`表进行查询，所以`role.module.ts`需要导入`Permission`:
+
+```typescript
+import { Module } from '@nestjs/common';
+import { RoleService } from './role.service';
+import { RoleController } from './role.controller';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Role } from './entities/role.entity';
+import { Permission } from '../permission/entities/permission.entity';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Role, Permission])],
+  controllers: [RoleController],
+  providers: [RoleService],
+})
+export class RoleModule {}
+
+```
+
+接着对外提供`API`, 修改`role.service.ts`文件：
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { CreateRoleDto } from './dto/create-role.dto';
+import { Role } from './entities/role.entity';
+import { Permission } from '../permission/entities/permission.entity';
+import { APIException } from '@/core/filter/http.exception/api.exception.filter';
+import { ErrorCodeEnum } from '@/common/enums/error.code.enum';
+
+@Injectable()
+export class RoleService {
+  constructor(
+    @InjectRepository(Role)
+    private roleRepository: Repository<Role>,
+    @InjectRepository(Permission)
+    private permissionRepository: Repository<Permission>,
+  ) {}
+
+  /**
+   * @description: 创建角色
+   * @param {CreateRoleDto} createRoleDto
+   * @return {*}
+   */
+  async create(createRoleDto: CreateRoleDto) {
+    const { permissionIds, name } = createRoleDto;
+
+    // 不允许乱传不存在的权限 id
+    const existingPermissions = await this.permissionRepository.find({
+      where: {
+        id: In(permissionIds),
+      },
+    });
+
+    const existingPermissionIds = existingPermissions.map(
+      (permission) => permission.id,
+    );
+
+    const nonExistingPermissionIds = permissionIds.filter(
+      (id) => !existingPermissionIds.includes(id as unknown as string),
+    );
+
+    if (nonExistingPermissionIds.length > 0) {
+      throw new APIException(
+        `未找到权限 ID: ${nonExistingPermissionIds.join(', ')}`,
+        ErrorCodeEnum.PERMISSION_NOT_FOUND,
+      );
+    }
+
+    const existRole = await this.roleRepository.findOne({
+      where: { name },
+    });
+
+    if (existRole) {
+      throw new APIException('角色已存在', ErrorCodeEnum.ROLE_EXIST);
+    }
+
+    return this.roleRepository.save({ permissions: existingPermissions, name });
+  }
+}
+```
+
+接着需要修改`user.module.ts` , 增加 `role` 实体:
+
+```typescript
+import { Module } from '@nestjs/common';
+import { UserService } from './user.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from './entities/user.entity';
+import { Role } from '../role/entities/role.entity';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([User, Role])],
+  controllers: [],
+  providers: [UserService],
+  exports: [UserService],
+})
+export class UserModule {}
+```
+
+接着修改`user.service.ts`的逻辑：
+
+```typescript
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { CreateUserDto } from './dto/create-user.dto';
+import { In, Repository } from 'typeorm';
+import { User } from './entities/user.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { APIException } from 'src/core/filter/http.exception/api.exception.filter';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
+import { Role } from '../role/entities/role.entity';
+
+@Injectable()
+export class UserService {
+  constructor(
+    @InjectRepository(User) private readonly userRepository: Repository<User>,
+    @InjectRepository(Role) private readonly roleRepository: Repository<Role>,
+  ) {}
+
+  /**
+   * @description: 查找用户
+   * @param {string} username
+   * @return {*}
+   */
+  async findOne(username: string) {
+    const user = await this.userRepository.findOne({
+      where: { username },
+    });
+
+    if (!user) throw new HttpException('用户不存在', HttpStatus.BAD_REQUEST);
+    return user;
+  }
+
+  /**
+   * @description: 注册用户
+   * @param {CreateUserDto} createUserDto
+   * @return {*}
+   */
+  async create(createUserDto: CreateUserDto) {
+    const { username, password, roleIds } = createUserDto;
+    const existUser = await this.userRepository.findOneBy({ username });
+
+    // 业务查询异常
+    if (existUser) {
+      throw new APIException('用户已存在', ErrorCodeEnum.USER_EXIST);
+    }
+
+    try {
+      // 查询数组 roleIds 对应所有 role 的实体
+      const roles = await this.roleRepository.find({
+        where: {
+          id: In(roleIds),
+        },
+      });
+
+      // 创建新用户，此时还未写入到数据库
+      const newUser = await this.userRepository.create({
+        username,
+        password,
+        roles,
+      });
+      // save 调用表示写入数据库
+      await this.userRepository.save(newUser);
+      return '注册成功';
+    } catch (error) {
+      // 服务器内部出错
+      throw new HttpException(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+}
+```
+
+接下来就要做权限的控制啦！
+
+在`public`装饰器的同级目录下新建`permissions.decorator.ts`：
+
+```typescript
+import { SetMetadata } from '@nestjs/common';
+
+export const Permissions = (...permissions: string[]) => {
+  return SetMetadata('permissions', permissions);
+};
+```
+
+然后创建`permission`守卫并设置成全局守卫：
+
+```
+nest g guard core/modules/permission
+```
+
+```typescript
+import { Module } from '@nestjs/common';
+import { PermissionService } from './permission.service';
+import { PermissionController } from './permission.controller';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Permission } from './entities/permission.entity';
+import { APP_GUARD } from '@nestjs/core';
+import { PermissionGuard } from './permission.guard';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Permission])],
+  controllers: [PermissionController],
+  providers: [
+    PermissionService,
+    {
+      provide: APP_GUARD,
+      useClass: PermissionGuard,
+    },
+  ],
+})
+export class PermissionModule {}
+
+```
+
+然后写守卫逻辑:
+
+```typescript
+import {
+  CanActivate,
+  ExecutionContext,
+  HttpException,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
+import { UserService } from '../user/user.service';
+
+@Injectable()
+export class PermissionGuard implements CanActivate {
+  constructor(
+    private reflector: Reflector,
+    private userServicese: UserService,
+  ) {}
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    interface CusRequest extends Request {
+      user?: any;
+    }
+    const request: CusRequest = context.switchToHttp().getRequest();
+    const requiredPermissions =
+      this.reflector.getAllAndOverride<string[]>('permissions', [
+        context.getClass(),
+        context.getHandler(),
+      ]) || [];
+
+    if (requiredPermissions.length === 0) return true;
+    const [, token] = request.headers.authorization?.split(' ') ?? [];
+
+    const permissionNames = await this.userServicese.findPermissionNames(
+      token,
+      request.user,
+    );
+
+    const isContainedPermission = requiredPermissions.every((item) =>
+      permissionNames.includes(item),
+    );
+    if (!isContainedPermission) {
+      throw new HttpException('权限不足', HttpStatus.FORBIDDEN);
+    }
+    return true;
+  }
+}
+```
+
+守卫的逻辑是，从 `request`中取出当前访问的`user`信息(这个信息是`auth.guard.ts`存入的)，然后调服务查询用户的权限，从`Permissions`装饰器中拿到当前的`Handler`需要什么权限，然后两者做对比，如果有权限则放行。
+
