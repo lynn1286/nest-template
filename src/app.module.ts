@@ -10,6 +10,7 @@ import { TransformInterceptor } from './core/interceptor/transform/transform.int
 import { UserModule } from './user/user.module';
 import { ValidationPipe } from './core/pipes/validation/validation.pipe';
 import { CacheModule } from './cache/cache.module';
+import { AuthModule } from './core/modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { CacheModule } from './cache/cache.module';
     }),
     UserModule,
     CacheModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [

@@ -14,7 +14,12 @@ export class ValidationPipe implements PipeTransform<any> {
       return paramValue;
     }
     const object = plainToClass(paramMetaType, paramValue);
-    const errors = await validate(object);
+
+    // 不允许传入DTO中未定义并且没有class-validator装饰器的参数,否则报错
+    const errors = await validate(object, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
     const errorList: string[] = [];
     const errObjList: ValidationError[] = [...errors];
 
