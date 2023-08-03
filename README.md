@@ -677,3 +677,287 @@ export class CacheService {
 }
 ```
 
+
+
+## 登陆注册逻辑
+
+新建文件：
+
+```
+nest g module core/modules/user
+nest g service core/modules/user
+```
+
+修改`user.module.ts`文件：
+
+```typescript
+import { Module } from '@nestjs/common';
+import { UserService } from './user.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from './entities/user.entity';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([User])], // 导入 User 实体
+  controllers: [],
+  providers: [UserService],
+  exports: [UserService], // 把 user 模块整个导出去
+})
+export class UserModule {}
+```
+
+在`user`目录下新建`entities`目录， 创建`user.entity.ts`文件：
+
+```typescript
+import { BeforeInsert, Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import * as crypto from 'crypto';
+import encry from '@/common/utils/crypto.util';
+
+@Entity('user')
+export class User {
+  /** 插入前处理加盐操作 */
+  @BeforeInsert()
+  beforeInsert() {
+    this.salt = crypto.randomBytes(4).toString('base64');
+    this.password = encry(this.password, this.salt);
+  }
+
+  @PrimaryGeneratedColumn('uuid')
+  id: number;
+
+  @Column({ length: 30 })
+  username: string;
+
+  @Column({ nullable: true })
+  nickname: string;
+
+  @Column()
+  password: string;
+
+  @Column({ nullable: true })
+  avatar: string;
+
+  @Column({ nullable: true })
+  email: string;
+
+  @Column({ nullable: true })
+  role: string;
+
+  @Column({ nullable: true })
+  salt: string;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  create_time: Date;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  update_time: Date;
+}
+```
+
+用户密码需要进行加密，这里使用 `typeorm`的`beforeInsert`勾子对密码进行加盐处理，加盐的方法放在`src/common/utils/crypto.util`下：
+
+```typescript
+import * as crypto from 'crypto';
+
+/**
+ * @description: 加盐
+ * @param {string} input
+ * @param {string} salt
+ * @return {*}
+ */
+export default (input: string, salt: string) => {
+  return crypto.pbkdf2Sync(input, salt, 1000, 64, 'sha256').toString('hex');
+};
+```
+
+需要按照`crypto`依赖。接着修改`user.service.ts`文件：
+
+```typescript
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { CreateUserDto } from './dto/create-user.dto';
+import { Repository } from 'typeorm';
+import { User } from './entities/user.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { APIException } from 'src/core/filter/http.exception/api.exception.filter';
+import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
+
+@Injectable()
+export class UserService {
+  constructor(
+    @InjectRepository(User) private readonly userRepository: Repository<User>,
+  ) {}
+
+  /**
+   * @description: 查找用户
+   * @param {string} username
+   * @return {*}
+   */
+  async findOne(username: string) {
+    const user = await this.userRepository.findOne({
+      where: { username },
+    });
+
+    if (!user) throw new HttpException('用户不存在', HttpStatus.BAD_REQUEST);
+    return user;
+  }
+
+  /**
+   * @description: 注册用户
+   * @param {CreateUserDto} createUserDto
+   * @return {*}
+   */
+  async create(createUserDto: CreateUserDto) {
+    const { username } = createUserDto;
+    const existUser = await this.userRepository.findOneBy({ username });
+
+    // 业务查询异常
+    if (existUser) {
+      throw new APIException('用户已存在', ErrorCodeEnum.USER_EXIST);
+    }
+
+    try {
+      // 创建新用户，此时还未写入到数据库
+      const newUser = await this.userRepository.create(createUserDto);
+      // save 调用表示写入数据库
+      await this.userRepository.save(newUser);
+      return '注册成功';
+    } catch (error) {
+      // 服务器内部出错
+      throw new HttpException(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+}
+```
+
+`user`服务提供两个方法，`findOne`是提供给登陆接口使用的，后面会用到，`create`方法的逻辑是用来注册用户的，`user`作为工具模块，不需要对外提供路由，接着我们创建业务模块`auth`：
+
+```
+nest g res auth
+```
+
+接着安装`@nestjs/jwt`,用来生成`token`：
+
+```
+npm i @nestjs/jwt
+```
+
+接着修改`auth.module.ts`的内容：
+
+```typescript
+import { Module } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { UserModule } from '@/core/modules/user/user.module';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+
+@Module({
+  imports: [
+    UserModule,
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        return {
+          secret: configService.get('GLOBAL_CONFIG.secret.jwt_secret'), // 从配置文件读取secret
+          global: true,
+          signOptions: {
+            expiresIn: '3600s',
+          },
+        };
+      },
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService],
+})
+export class AuthModule {}
+```
+
+`auth`模块通过配置文件传入`JwtModule`模块所需要的配置，接着去定义`auth.service.ts`文件：
+
+```typescript
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { CreateUserDto } from '@/core/modules/user/dto/create-user.dto';
+import { UserService } from '@/core/modules/user/user.service';
+import { SigninDto } from './dto/signin.dto';
+import encry from '@/common/utils/crypto.util';
+import { JwtService } from '@nestjs/jwt';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly userService: UserService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  /**
+   * @description: 注册用户
+   * @param {CreateUserDto} createUserDto
+   * @return {*}
+   */
+  async create(createUserDto: CreateUserDto) {
+    return await this.userService.create(createUserDto);
+  }
+
+  /**
+   * @description: 登陆
+   * @param {SigninDto} signinDto
+   * @return {*}
+   */
+  async signin(signinDto: SigninDto) {
+    const { username, password } = signinDto;
+    const user = await this.userService.findOne(username);
+
+    if (user?.password !== encry(password, user.salt)) {
+      throw new HttpException('密码错误', HttpStatus.UNAUTHORIZED);
+    }
+
+    // jwt 参数
+    const payload = { username: user.username, sub: user.id };
+
+    // 生成 token
+    return {
+      access_token: this.jwtService.sign(payload),
+    };
+  }
+}
+```
+
+这里定义了`create` 和 `signin` 方法用来，`create` 调用的是`userService`提供的注册服务，所以记得一定要把`user`模块导出来，否则这里不能够使用`user`模块， `signin`方法是用来进行登陆，登陆合法的话，返回 `jwt`给前端。
+
+接着定义`auth.controller.ts`文件：
+
+```typescript
+import { Controller, Post, Body } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { CreateUserDto } from '@/core/modules/user/dto/create-user.dto';
+import { SigninDto } from './dto/signin.dto';
+
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @Post('signup')
+  async signup(@Body() createUserDto: CreateUserDto) {
+    return await this.authService.create(createUserDto);
+  }
+
+  @Post('signin')
+  async signin(@Body() signinDto: SigninDto) {
+    return await this.authService.signin(signinDto);
+  }
+}
+
+```
+
+对外暴露`API`给前端。
+
+
+
+## 路由守卫验证`JWT`
+
+注册跟登陆搞定后，需要对后续的访问进行`JWT`的验证啦。创建守卫：
+
+```
+
+```
+

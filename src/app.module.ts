@@ -7,10 +7,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { HttpExceptionFilter } from './core/filter/http.exception/http.exception.filter';
 import { TransformInterceptor } from './core/interceptor/transform/transform.interceptor';
-import { UserModule } from './user/user.module';
+import { UserModule } from './core/modules/user/user.module';
 import { ValidationPipe } from './core/pipes/validation/validation.pipe';
 import { CacheModule } from './cache/cache.module';
-import { AuthModule } from './core/modules/auth/auth.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
