@@ -1,7 +1,16 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { BeforeInsert, Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import * as crypto from 'crypto';
+import encry from '@/common/utils/crypto.util';
 
 @Entity('user')
 export class User {
+  /** 插入前处理加盐操作 */
+  @BeforeInsert()
+  beforeInsert() {
+    this.salt = crypto.randomBytes(4).toString('base64');
+    this.password = encry(this.password, this.salt);
+  }
+
   @PrimaryGeneratedColumn('uuid')
   id: number;
 

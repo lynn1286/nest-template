@@ -1,7 +1,6 @@
 http:
   host: "localhost"
   port: 3000
-
 db:
   mysql:
     type: "mysql"
@@ -15,3 +14,5 @@ db:
   redis:
     host: "127.0.0.1"
     port: 6379
+secret:
+  jwt_secret: "jwt_secret_nest_template"
