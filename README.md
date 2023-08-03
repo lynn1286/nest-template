@@ -855,10 +855,10 @@ import { ConfigService } from '@nestjs/config';
     UserModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
+      global: true,
       useFactory: (configService: ConfigService) => {
         return {
           secret: configService.get('GLOBAL_CONFIG.secret.jwt_secret'), // 从配置文件读取secret
-          global: true,
           signOptions: {
             expiresIn: '3600s',
           },
@@ -958,6 +958,134 @@ export class AuthController {
 注册跟登陆搞定后，需要对后续的访问进行`JWT`的验证啦。创建守卫：
 
 ```
+nest g gu auth
+```
+
+然后修改`auth.guard.ts`文件：
+
+```typescript
+import {
+  CanActivate,
+  ExecutionContext,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+import { Request } from 'express';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
+
+@Injectable()
+export class AuthGuard implements CanActivate {
+  private readonly logger = new Logger(AuthGuard.name);
+
+  @Inject()
+  private jwtService: JwtService;
+
+  @Inject()
+  private configService: ConfigService;
+
+  @Inject()
+  private reflector: Reflector;
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    // 获取被public装饰器装饰的标记符号
+    const isPublic = this.reflector.getAllAndOverride<boolean>('isPublic', [
+      // 即将调用的方法
+      context.getHandler(),
+      // controller类型
+      context.getClass(),
+    ]);
+
+    // 不需要鉴权的接口
+    if (isPublic) return true;
+
+    const request = context.switchToHttp().getRequest();
+    const token = this.extractTokenFromHeader(request);
+    if (!token) {
+      this.logger.log(`非法访问: ${request.ip}`);
+      throw new HttpException('禁止访问,请联系管理员', HttpStatus.FORBIDDEN);
+    }
+
+    try {
+      // 校验 token
+      const payload = await this.jwtService.verifyAsync(token, {
+        secret: this.configService.get('GLOBAL_CONFIG.secret.jwt_secret'),
+      });
+      request['user'] = payload;
+    } catch {
+      this.logger.log(`token校验失败: ${request.ip}`);
+      throw new HttpException(
+        'token校验失败,请确认token是否有效',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    return true;
+  }
+
+  /**
+   * @description: 解析获取token
+   * @param {Request} request
+   * @return {*}
+   */
+  private extractTokenFromHeader(request: Request): string | undefined {
+    const [type, token] = request.headers.authorization?.split(' ') ?? [];
+    return type === 'Bearer' ? token : undefined;
+  }
+}
+```
+
+接着修改`auth.module.ts`： 
+
+```typescript
+import { Module } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { UserModule } from '@/core/modules/user/user.module';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { AuthGuard } from './auth.guard';
+
+@Module({
+  imports: [
+    UserModule,
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      global: true,
+      useFactory: (configService: ConfigService) => {
+        return {
+          secret: configService.get('GLOBAL_CONFIG.secret.jwt_secret'),
+          signOptions: {
+            expiresIn: '3600s',
+          },
+        };
+      },
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [
+    AuthService,
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard, // 全局守卫
+    },
+  ],
+})
+export class AuthModule {}
 
 ```
 
+预设系统大部分的接口都需要进行鉴权，所以直接设置成全局守卫，之后我们再自定义一个装饰器将某些接口公开，所以，创建守卫中出现的`isPublic`逻辑的文件`public.decorator.ts`：
+
+```typescript
+import { SetMetadata } from '@nestjs/common';
+
+export const Public = () => SetMetadata('isPublic', true);
+```
+
+逻辑很简单，给公开的接口做个标记。
