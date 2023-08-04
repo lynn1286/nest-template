@@ -5,6 +5,7 @@ import { SigninDto } from './dto/signin.dto';
 import { Public } from '@/common/decorator/public.decorator';
 import { CreatePermissionDtoArray } from './dto/create-permission.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
+import { Permissions } from '@/common/decorator/permissions.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -23,11 +24,13 @@ export class AuthController {
   }
 
   @Post('createPermission')
+  @Permissions('auth/createPermission')
   createPermission(@Body() createPermissionDtoArray: CreatePermissionDtoArray) {
     this.authService.createPermission(createPermissionDtoArray);
   }
 
   @Post('createRole')
+  @Permissions('auth/createRole')
   createRole(@Body() createRoleDto: CreateRoleDto) {
     return this.authService.createRole(createRoleDto);
   }

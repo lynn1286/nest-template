@@ -11,7 +11,7 @@ import { AppService } from './app.service';
 import { ConfigService } from '@nestjs/config';
 import { APIException } from './core/filter/http.exception/api.exception.filter';
 import { ErrorCodeEnum } from './common/enums/error.code.enum';
-import { AuthGuard } from './auth/auth.guard';
+import { AuthGuard } from './modules/auth/auth.guard';
 import { Public } from './common/decorator/public.decorator';
 import { Permissions } from './common/decorator/permissions.decorator';
 

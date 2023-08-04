@@ -1089,3 +1089,10 @@ export const Public = () => SetMetadata('isPublic', true);
 ```
 
 逻辑很简单，给公开的接口做个标记。
+
+
+
+## `RBAC`权限控制
+
+
+

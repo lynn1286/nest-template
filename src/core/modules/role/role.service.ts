@@ -5,7 +5,7 @@ import { Role } from './entities/role.entity';
 import { Permission } from '../permission/entities/permission.entity';
 import { APIException } from '@/core/filter/http.exception/api.exception.filter';
 import { ErrorCodeEnum } from '@/common/enums/error.code.enum';
-import { CreateRoleDto } from '@/auth/dto/create-role.dto';
+import { CreateRoleDto } from '@/modules/auth/dto/create-role.dto';
 
 @Injectable()
 export class RoleService {

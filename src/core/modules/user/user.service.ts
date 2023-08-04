@@ -6,7 +6,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { APIException } from 'src/core/filter/http.exception/api.exception.filter';
 import { ErrorCodeEnum } from 'src/common/enums/error.code.enum';
 import { Role } from '../role/entities/role.entity';
-import { SigninDto } from '@/auth/dto/signin.dto';
+import { SigninDto } from '@/modules/auth/dto/signin.dto';
 import encry from '@/common/utils/crypto.util';
 import { JwtService } from '@nestjs/jwt';
 
@@ -73,6 +73,7 @@ export class UserService {
       where: { username: userInfo.username },
       relations: ['roles', 'roles.permissions'],
     });
+
     if (user) {
       const permissions = user.roles.flatMap((role) => role.permissions);
       const permissionNames = permissions.map((item) => item.name);

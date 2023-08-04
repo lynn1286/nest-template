@@ -9,10 +9,11 @@ import { HttpExceptionFilter } from './core/filter/http.exception/http.exception
 import { TransformInterceptor } from './core/interceptor/transform/transform.interceptor';
 import { UserModule } from './core/modules/user/user.module';
 import { ValidationPipe } from './core/pipes/validation/validation.pipe';
-import { CacheModule } from './cache/cache.module';
-import { AuthModule } from './auth/auth.module';
+import { CacheModule } from './core/modules/cache/cache.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { PermissionModule } from './core/modules/permission/permission.module';
 import { RoleModule } from './core/modules/role/role.module';
+import { ArticleModule } from './modules/article/article.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { RoleModule } from './core/modules/role/role.module';
     AuthModule,
     PermissionModule,
     RoleModule,
+    ArticleModule,
   ],
   controllers: [AppController],
   providers: [

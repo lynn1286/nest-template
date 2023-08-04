@@ -6,7 +6,7 @@ import { ErrorCodeEnum } from '@/common/enums/error.code.enum';
 import {
   CreatePermissionDto,
   CreatePermissionDtoArray,
-} from '@/auth/dto/create-permission.dto';
+} from '@/modules/auth/dto/create-permission.dto';
 
 @Injectable()
 export class PermissionService {

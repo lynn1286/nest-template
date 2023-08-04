@@ -15,10 +15,12 @@ export class PermissionGuard implements CanActivate {
     private reflector: Reflector,
     private userServicese: UserService,
   ) {}
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     interface CusRequest extends Request {
       user?: any;
     }
+
     const request: CusRequest = context.switchToHttp().getRequest();
     const requiredPermissions =
       this.reflector.getAllAndOverride<string[]>('permissions', [
@@ -26,9 +28,10 @@ export class PermissionGuard implements CanActivate {
         context.getHandler(),
       ]) || [];
 
+    // 不需要权限的资源可以放行
     if (requiredPermissions.length === 0) return true;
-    const [, token] = request.headers.authorization?.split(' ') ?? [];
 
+    const [, token] = request.headers.authorization?.split(' ') ?? [];
     const permissionNames = await this.userServicese.findPermissionNames(
       token,
       request.user,
