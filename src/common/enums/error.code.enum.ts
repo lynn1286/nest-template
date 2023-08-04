@@ -18,6 +18,8 @@ export enum ErrorCodeEnum {
   PERMISSSION_EXIST = 1002,
   /** 角色已存在 */
   ROLE_EXIST = 1003,
+  /** 角色已存在 */
+  ROLE_NOT_EXIST = 1004,
   /** 未找到权限 */
-  PERMISSION_NOT_FOUND = 1004,
+  PERMISSION_NOT_FOUND = 1005,
 }

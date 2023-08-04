@@ -1094,5 +1094,156 @@ export const Public = () => SetMetadata('isPublic', true);
 
 ## `RBAC`权限控制
 
+`RBAC(Role Based Access Control)`是基于**角色(Role)**的权限控制,简单来说就是给用户赋予一些角色,那么该用户就会拥有这些角色的所有权限。
 
+关系总览：
+
+> 用户与角色： 多对多的关系，可以给用户设置多个角色，角色可以设置给多个用户。
+>
+> 角色与权限： 多对多的关系，一个角色可以拥有多个权限，一个权限可以被多个角色使用。
+
+我们已经有`user`表，现在还需要创建`role`表跟`permission`表：
+
+```
+nest g res core/modules/role
+nest g res core/modules/permission
+```
+
+进入`permission`模块修改实体文件`permission.entity.ts`：
+
+```typescript
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+
+@Entity()
+export class Permission {
+  @PrimaryGeneratedColumn()
+  id: string;
+
+  @Column({
+    length: 50,
+  })
+  name: string;
+
+  @Column({
+    length: 100,
+    nullable: true,
+  })
+  desc: string;
+
+  @CreateDateColumn()
+  createTime: Date;
+
+  @UpdateDateColumn()
+  updateTime: Date;
+}
+```
+
+这是权限表的所有字段，接着进入`role`模块修改实体文件`role.entity.ts`：
+
+```typescript
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { Permission } from '../../permission/entities/permission.entity';
+
+@Entity()
+export class Role {
+  @PrimaryGeneratedColumn()
+  id: string;
+
+  @Column({
+    length: 20,
+  })
+  name: string;
+
+  @CreateDateColumn()
+  createTime: Date;
+
+  @UpdateDateColumn()
+  updateTime: Date;
+
+  // 与 Permission 表是多对多的关系 , createForeignKeyConstraints 表示不使用物理外键来关联表
+  @ManyToMany(() => Permission, { createForeignKeyConstraints: false })
+  // 创建关联的中间表 ， 命名为： role_permission_relation
+  @JoinTable({
+    name: 'role_permission_relation',
+  })
+  permissions: Permission[];
+}
+```
+
+这样我们就完成了角色跟权限的关联关系，我们还需要修改已有的用户表的实体`user.entity.ts`：
+
+```typescript
+import {
+  BeforeInsert,
+  Column,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import * as crypto from 'crypto';
+import encry from '@/common/utils/crypto.util';
+import { Role } from '../../role/entities/role.entity';
+
+@Entity('user')
+export class User {
+  /** 插入前处理加盐操作 */
+  @BeforeInsert()
+  beforeInsert() {
+    this.salt = crypto.randomBytes(4).toString('base64');
+    this.password = encry(this.password, this.salt);
+  }
+
+  @PrimaryGeneratedColumn('uuid')
+  id: number;
+
+  @Column({ length: 30 })
+  username: string;
+
+  @Column({ nullable: true })
+  nickname: string;
+
+  @Column()
+  password: string;
+
+  @Column({ nullable: true })
+  avatar: string;
+
+  @Column({ nullable: true })
+  email: string;
+
+  @Column({ nullable: true })
+  salt: string;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  create_time: Date;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  update_time: Date;
+	
+  // 与 Role 表是多对多的关系 , createForeignKeyConstraints 表示不使用物理外键来关联表
+  @ManyToMany(() => Role, { createForeignKeyConstraints: false })
+  // 创建关联的中间表 ， 命名为： user_role_relation
+  @JoinTable({
+    name: 'user_role_relation',
+  })
+  roles: Role[];
+}
+```
+
+最后记得要在各模块中导入实体类，接着启动程序就能够看到数据库多了4张表分别是：`role` 、`role_permission_relation`、`permission`、`user_role_relation`。
 

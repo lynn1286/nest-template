@@ -6,6 +6,7 @@ import { PermissionService } from '@/core/modules/permission/permission.service'
 import { CreatePermissionDtoArray } from './dto/create-permission.dto';
 import { RoleService } from '@/core/modules/role/role.service';
 import { CreateRoleDto } from './dto/create-role.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
 
 @Injectable()
 export class AuthService {
@@ -49,5 +50,15 @@ export class AuthService {
    */
   async createRole(createRoleDto: CreateRoleDto) {
     return await this.roleService.create(createRoleDto);
+  }
+
+  /**
+   * @description: 根据ID更新角色
+   * @param {number} id
+   * @param {UpdateRoleDto} updateRoleDto
+   * @return {*}
+   */
+  async updateRole(id: string, updateRoleDto: UpdateRoleDto) {
+    return await this.roleService.updateById(id, updateRoleDto);
   }
 }
