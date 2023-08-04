@@ -26,6 +26,7 @@ export class AuthGuard implements CanActivate {
   private reflector: Reflector;
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // 支持在 controller 或者 handler 上使用装饰器
     const isPublic = this.reflector.getAllAndOverride<boolean>('isPublic', [
       // 即将调用的方法
       context.getHandler(),

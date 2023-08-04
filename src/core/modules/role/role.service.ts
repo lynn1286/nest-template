@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { CreateRoleDto } from './dto/create-role.dto';
 import { Role } from './entities/role.entity';
 import { Permission } from '../permission/entities/permission.entity';
 import { APIException } from '@/core/filter/http.exception/api.exception.filter';
 import { ErrorCodeEnum } from '@/common/enums/error.code.enum';
+import { CreateRoleDto } from '@/auth/dto/create-role.dto';
 
 @Injectable()
 export class RoleService {

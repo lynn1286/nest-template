@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Permission } from './entities/permission.entity';
+import { ErrorCodeEnum } from '@/common/enums/error.code.enum';
 import {
   CreatePermissionDto,
   CreatePermissionDtoArray,
-} from './dto/create-permission.dto';
-import { Permission } from './entities/permission.entity';
-import { ErrorCodeEnum } from '@/common/enums/error.code.enum';
+} from '@/auth/dto/create-permission.dto';
 
 @Injectable()
 export class PermissionService {

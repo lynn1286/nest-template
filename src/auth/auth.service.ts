@@ -1,15 +1,18 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { CreateUserDto } from '@/core/modules/user/dto/create-user.dto';
 import { UserService } from '@/core/modules/user/user.service';
 import { SigninDto } from './dto/signin.dto';
-import encry from '@/common/utils/crypto.util';
-import { JwtService } from '@nestjs/jwt';
+import { PermissionService } from '@/core/modules/permission/permission.service';
+import { CreatePermissionDtoArray } from './dto/create-permission.dto';
+import { RoleService } from '@/core/modules/role/role.service';
+import { CreateRoleDto } from './dto/create-role.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
-    private readonly jwtService: JwtService,
+    private readonly permissionService: PermissionService,
+    private readonly roleService: RoleService,
   ) {}
 
   /**
@@ -17,8 +20,8 @@ export class AuthService {
    * @param {CreateUserDto} createUserDto
    * @return {*}
    */
-  async create(createUserDto: CreateUserDto) {
-    return await this.userService.create(createUserDto);
+  async signup(createUserDto: CreateUserDto) {
+    return await this.userService.signup(createUserDto);
   }
 
   /**
@@ -27,19 +30,24 @@ export class AuthService {
    * @return {*}
    */
   async signin(signinDto: SigninDto) {
-    const { username, password } = signinDto;
-    const user = await this.userService.findOne(username);
+    return await this.userService.signin(signinDto);
+  }
 
-    if (user?.password !== encry(password, user.salt)) {
-      throw new HttpException('密码错误', HttpStatus.UNAUTHORIZED);
-    }
+  /**
+   * @description: 创建权限
+   * @param {CreatePermissionDtoArray} createPermissionDtoArray
+   * @return {*}
+   */
+  async createPermission(createPermissionDtoArray: CreatePermissionDtoArray) {
+    return await this.permissionService.create(createPermissionDtoArray);
+  }
 
-    // jwt 参数
-    const payload = { username: user.username, sub: user.id };
-
-    // 生成 token
-    return {
-      access_token: this.jwtService.sign(payload),
-    };
+  /**
+   * @description: 创建角色
+   * @param {CreateRoleDto} createRoleDto
+   * @return {*}
+   */
+  async createRole(createRoleDto: CreateRoleDto) {
+    return await this.roleService.create(createRoleDto);
   }
 }
